@@ -1,55 +1,42 @@
-import tkinter as tk
-from tkinter import messagebox
-import sqlite3
+from pymongo import MongoClient
 from datetime import datetime
 
 class Database:
-    def __init__(self, db_file):
-        self.connection = sqlite3.connect(db_file)
-        self.cursor = self.connection.cursor()
-        self.create_expenses_table()
-
-    def create_expenses_table(self):
-        query = """
-        CREATE TABLE IF NOT EXISTS expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            expense TEXT,
-            amount REAL,
-            category TEXT,
-            month INTEGER,
-            year INTEGER
-        )
-        """
-        self.cursor.execute(query)
-        self.connection.commit()
+    def __init__(self, uri):
+        self.client = MongoClient(uri)
+        self.db = self.client['finance_tracker']
+        self.collection = self.db['expenses']
 
     def add_expense(self, expense, amount, category):
-        now = datetime.now()
-        month = now.month
-        year = now.year
-        query = "INSERT INTO expenses (expense, amount, category, month, year) VALUES (?, ?, ?, ?, ?)"
-        self.cursor.execute(query, (expense, amount, category, month, year))
-        self.connection.commit()
-
-    def delete_expense(self, expense_id):
-        query = "DELETE FROM expenses WHERE id = ?"
-        self.cursor.execute(query, (expense_id,))
-        self.connection.commit()
+        # Assume you have a method to get current month and year
+        month = datetime.now().month
+        year = datetime.now().year
+        self.collection.insert_one({
+            'expense': expense,
+            'amount': amount,
+            'category': category,
+            'month': month,
+            'year': year,
+            'date': datetime.now()  # Store the date of the expense
+        })
 
     def get_expenses(self):
-        query = "SELECT * FROM expenses"
-        self.cursor.execute(query)
-        return self.cursor.fetchall()
+        return list(self.collection.find())
 
-    def get_expenses_by_month_year(self, month, year):
-        query = "SELECT * FROM expenses WHERE month = ? AND year = ?"
-        self.cursor.execute(query, (month, year))
-        return self.cursor.fetchall()
-
-    def view_all_expenses(self):
-        query = "SELECT * FROM expenses"
-        self.cursor.execute(query)
-        return self.cursor.fetchall()
+    def delete_expense(self, expense_id):
+        self.collection.delete_one({'_id': expense_id})
 
     def close_connection(self):
-        self.connection.close()
+        self.client.close()
+
+    def get_expenses_by_date(self, start_date, end_date):
+        # Convert the dates to datetime objects
+        start_datetime = datetime.combine(start_date, datetime.min.time())
+        end_datetime = datetime.combine(end_date, datetime.max.time())
+
+        return list(self.collection.find({
+            'date': {
+                '$gte': start_datetime,
+                '$lte': end_datetime
+            }
+        }))
